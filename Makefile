@@ -292,7 +292,7 @@ nrf52840_xxaa: CFLAGS += -D__STACK_SIZE=2048
 nrf52840_xxaa: ASMFLAGS += -D__HEAP_SIZE=1024
 nrf52840_xxaa: ASMFLAGS += -D__STACK_SIZE=2048
 
-# Add standard libraries at the very end of the linker input, after all objects
+
 # that may need symbols provided by these libraries.
 LIB_FILES += -lc -lnosys -lm
 
@@ -301,6 +301,12 @@ LIB_FILES += -lc -lnosys -lm
 
 # Default target - first one defined
 default: nrf52840_xxaa
+
+HDREXTS = .h .H .hh .hpp .HPP .h++ .hxx .hp
+HDR_FILES = $(foreach d,$(INC_FOLDERS),$(wildcard $(addprefix $(d)/*,$(HDREXTS))))
+
+ctags: $(SRC_FILES) $(HDR_FILES)
+		ctags $(SRC_FILES) $(HDR_FILES)
 
 # Print all targets that can be built
 help:
