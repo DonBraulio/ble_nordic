@@ -59,6 +59,7 @@
 #include "ble_advertising.h"
 #include "ble_bas.h"
 #include "ble_hrs.h"
+#include "ble_lbs.h"
 #include "ble_dis.h"
 #include "ble_conn_params.h"
 #include "sensorsim.h"
@@ -85,8 +86,8 @@
 #include "nrf_log_default_backends.h"
 
 
-#define DEVICE_NAME                         "Nordic_HRM"                            /**< Name of device. Will be included in the advertising data. */
-#define MANUFACTURER_NAME                   "NordicSemiconductor"                   /**< Manufacturer. Will be passed to Device Information Service. */
+#define DEVICE_NAME                         "BR_Nordic"                             /**< Name of device. Will be included in the advertising data. */
+#define MANUFACTURER_NAME                   "Tryolabs"                              /**< Manufacturer. Will be passed to Device Information Service. */
 
 #define APP_BLE_OBSERVER_PRIO               3                                       /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 #define APP_BLE_CONN_CFG_TAG                1                                       /**< A tag identifying the SoftDevice BLE configuration. */
@@ -136,6 +137,7 @@
 
 BLE_BAS_DEF(m_bas);                                                 /**< Battery service instance. */
 BLE_HRS_DEF(m_hrs);                                                 /**< Heart rate service instance. */
+BLE_LBS_DEF(m_lbs);                                                 /**< Heart rate service instance. */
 NRF_BLE_GATT_DEF(m_gatt);                                           /**< GATT module instance. */
 NRF_BLE_QWR_DEF(m_qwr);                                             /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);                                 /**< Advertising module instance. */
@@ -149,13 +151,6 @@ static sensorsim_cfg_t   m_heart_rate_sim_cfg;                      /**< Heart R
 static sensorsim_state_t m_heart_rate_sim_state;                    /**< Heart Rate sensor simulator state. */
 static sensorsim_cfg_t   m_rr_interval_sim_cfg;                     /**< RR Interval sensor simulator configuration. */
 static sensorsim_state_t m_rr_interval_sim_state;                   /**< RR Interval sensor simulator state. */
-
-static ble_uuid_t m_adv_uuids[] =                                   /**< Universally unique service identifiers. */
-{
-    {BLE_UUID_HEART_RATE_SERVICE, BLE_UUID_TYPE_BLE},
-    {BLE_UUID_BATTERY_SERVICE, BLE_UUID_TYPE_BLE},
-    {BLE_UUID_DEVICE_INFORMATION_SERVICE, BLE_UUID_TYPE_BLE}
-};
 
 static TimerHandle_t m_battery_timer;                               /**< Definition of battery timer. */
 static TimerHandle_t m_heart_rate_timer;                            /**< Definition of heart rate timer. */
@@ -290,37 +285,37 @@ static void heart_rate_meas_timeout_handler(TimerHandle_t xTimer)
  * @param[in] xTimer Handler to the timer that called this function.
  *                   You may get identifier given to the function xTimerCreate using pvTimerGetTimerID.
  */
-static void rr_interval_timeout_handler(TimerHandle_t xTimer)
-{
-    UNUSED_PARAMETER(xTimer);
-
-    if (m_rr_interval_enabled)
-    {
-        uint16_t rr_interval;
-
-        rr_interval = (uint16_t)sensorsim_measure(&m_rr_interval_sim_state,
-                                                  &m_rr_interval_sim_cfg);
-        ble_hrs_rr_interval_add(&m_hrs, rr_interval);
-    }
-}
-
-
-/**@brief Function for handling the Sensor Contact Detected timer time-out.
- *
- * @details This function will be called each time the Sensor Contact Detected timer expires.
- *
- * @param[in] xTimer Handler to the timer that called this function.
- *                   You may get identifier given to the function xTimerCreate using pvTimerGetTimerID.
- */
-static void sensor_contact_detected_timeout_handler(TimerHandle_t xTimer)
-{
-    static bool sensor_contact_detected = false;
-
-    UNUSED_PARAMETER(xTimer);
-
-    sensor_contact_detected = !sensor_contact_detected;
-    ble_hrs_sensor_contact_detected_update(&m_hrs, sensor_contact_detected);
-}
+ static void rr_interval_timeout_handler(TimerHandle_t xTimer)
+ {
+     UNUSED_PARAMETER(xTimer);
+ 
+     if (m_rr_interval_enabled)
+     {
+         uint16_t rr_interval;
+ 
+         rr_interval = (uint16_t)sensorsim_measure(&m_rr_interval_sim_state,
+                                                   &m_rr_interval_sim_cfg);
+         ble_hrs_rr_interval_add(&m_hrs, rr_interval);
+     }
+ }
+ 
+ 
+ /**@brief Function for handling the Sensor Contact Detected timer time-out.
+  *
+  * @details This function will be called each time the Sensor Contact Detected timer expires.
+  *
+  * @param[in] xTimer Handler to the timer that called this function.
+  *                   You may get identifier given to the function xTimerCreate using pvTimerGetTimerID.
+  */
+ static void sensor_contact_detected_timeout_handler(TimerHandle_t xTimer)
+ {
+     static bool sensor_contact_detected = false;
+ 
+     UNUSED_PARAMETER(xTimer);
+ 
+     sensor_contact_detected = !sensor_contact_detected;
+     ble_hrs_sensor_contact_detected_update(&m_hrs, sensor_contact_detected);
+ }
 
 
 /**@brief Function for the Timer initialization.
@@ -384,7 +379,7 @@ static void gap_params_init(void)
                                           strlen(DEVICE_NAME));
     APP_ERROR_CHECK(err_code);
 
-    err_code = sd_ble_gap_appearance_set(BLE_APPEARANCE_HEART_RATE_SENSOR_HEART_RATE_BELT);
+    err_code = sd_ble_gap_appearance_set(BLE_APPEARANCE_GENERIC_REMOTE_CONTROL);
     APP_ERROR_CHECK(err_code);
 
     memset(&gap_conn_params, 0, sizeof(gap_conn_params));
@@ -419,6 +414,24 @@ static void nrf_qwr_error_handler(uint32_t nrf_error)
     APP_ERROR_HANDLER(nrf_error);
 }
 
+/**@brief Function for handling write events to the LED characteristic.
+ *
+ * @param[in] p_lbs     Instance of LED Button Service to which the write applies.
+ * @param[in] led_state Written/desired state of the LED.
+ */
+static void led_write_handler(uint16_t conn_handle, ble_lbs_t * p_lbs, uint8_t led_state)
+{
+    if (led_state)
+    {
+        bsp_board_led_on(BSP_BOARD_LED_2);
+        NRF_LOG_INFO("Received LED ON!");
+    }
+    else
+    {
+        bsp_board_led_off(BSP_BOARD_LED_2);
+        NRF_LOG_INFO("Received LED OFF!");
+    }
+}
 
 /**@brief Function for initializing services that will be used by the application.
  *
@@ -430,6 +443,7 @@ static void services_init(void)
     ble_hrs_init_t     hrs_init;
     ble_bas_init_t     bas_init;
     ble_dis_init_t     dis_init;
+    ble_lbs_init_t   lbs_init;
     nrf_ble_qwr_init_t qwr_init = {0};
     uint8_t            body_sensor_location;
 
@@ -479,6 +493,13 @@ static void services_init(void)
     dis_init.dis_char_rd_sec = SEC_OPEN;
 
     err_code = ble_dis_init(&dis_init);
+    APP_ERROR_CHECK(err_code);
+
+    // Initialize LED Button service (LBS)
+    memset(&lbs_init, 0, sizeof(lbs_init));
+    lbs_init.led_write_handler = led_write_handler;
+
+    err_code = ble_lbs_init(&m_lbs, &lbs_init);
     APP_ERROR_CHECK(err_code);
 }
 
@@ -756,6 +777,18 @@ static void bsp_event_handler(bsp_event_t event)
                 }
             }
             break;
+        case BSP_EVENT_KEY_0:
+            err_code = ble_lbs_on_button_change(m_conn_handle, &m_lbs, (uint8_t)bsp_button_is_pressed(BSP_BUTTON_0));
+            if ((err_code != NRF_SUCCESS) &&
+                (err_code != NRF_ERROR_INVALID_STATE) &&
+                (err_code != NRF_ERROR_RESOURCES) &&
+                (err_code != NRF_ERROR_BUSY) &&
+                (err_code != BLE_ERROR_GATTS_SYS_ATTR_MISSING)
+               )
+            {
+                APP_ERROR_HANDLER(err_code);
+            }
+            break;
 
         default:
             break;
@@ -813,6 +846,13 @@ static void advertising_init(void)
 {
     ret_code_t             err_code;
     ble_advertising_init_t init;
+    ble_uuid_t m_adv_uuids[] =  /**< Universally unique service identifiers. */
+    {
+        {BLE_UUID_HEART_RATE_SERVICE, BLE_UUID_TYPE_BLE},
+        {BLE_UUID_BATTERY_SERVICE, BLE_UUID_TYPE_BLE},
+        {BLE_UUID_DEVICE_INFORMATION_SERVICE, BLE_UUID_TYPE_BLE},
+    };
+
 
     memset(&init, 0, sizeof(init));
 
@@ -957,8 +997,8 @@ int main(void)
     buttons_leds_init(&erase_bonds);
     gap_params_init();
     gatt_init();
-    advertising_init();
     services_init();
+    advertising_init();
     sensor_simulator_init();
     conn_params_init();
     peer_manager_init();
