@@ -91,6 +91,7 @@ SRC_FILES += \
   $(SDK_ROOT)/components/ble/ble_services/ble_bas/ble_bas.c \
   $(SDK_ROOT)/components/ble/ble_services/ble_dis/ble_dis.c \
   $(SDK_ROOT)/components/ble/ble_services/ble_hrs/ble_hrs.c \
+  $(SDK_ROOT)/components/ble/ble_services/ble_lbs/ble_lbs.c \
   $(SDK_ROOT)/components/softdevice/common/nrf_sdh.c \
   $(SDK_ROOT)/components/softdevice/common/nrf_sdh_ble.c \
   $(SDK_ROOT)/components/softdevice/common/nrf_sdh_freertos.c \
@@ -220,7 +221,6 @@ INC_FOLDERS += \
   $(SDK_ROOT)/components/nfc/ndef/connection_handover/ep_oob_rec \
   $(SDK_ROOT)/external/segger_rtt \
   $(SDK_ROOT)/components/libraries/atomic_fifo \
-  $(SDK_ROOT)/components/ble/ble_services/ble_lbs_c \
   $(SDK_ROOT)/components/nfc/ndef/connection_handover/ble_pair_lib \
   $(SDK_ROOT)/components/libraries/crypto \
   $(SDK_ROOT)/components/ble/ble_racp \
@@ -254,7 +254,8 @@ CFLAGS += -DS140
 CFLAGS += -DSOFTDEVICE_PRESENT
 CFLAGS += -mcpu=cortex-m4
 CFLAGS += -mthumb -mabi=aapcs
-CFLAGS += -Wall -Werror
+CFLAGS += -Wall
+#  -Werror
 CFLAGS += -mfloat-abi=hard -mfpu=fpv4-sp-d16
 # keep every function in a separate section, this allows linker to discard unused ones
 CFLAGS += -ffunction-sections -fdata-sections -fno-strict-aliasing
@@ -287,10 +288,10 @@ LDFLAGS += -Wl,--gc-sections
 # use newlib in nano version
 LDFLAGS += --specs=nano.specs
 
-nrf52840_xxaa: CFLAGS += -D__HEAP_SIZE=1024
-nrf52840_xxaa: CFLAGS += -D__STACK_SIZE=2048
-nrf52840_xxaa: ASMFLAGS += -D__HEAP_SIZE=1024
-nrf52840_xxaa: ASMFLAGS += -D__STACK_SIZE=2048
+nrf52840_xxaa: CFLAGS += -D__HEAP_SIZE=2048
+nrf52840_xxaa: CFLAGS += -D__STACK_SIZE=4096
+nrf52840_xxaa: ASMFLAGS += -D__HEAP_SIZE=2048
+nrf52840_xxaa: ASMFLAGS += -D__STACK_SIZE=4096
 
 
 # that may need symbols provided by these libraries.
@@ -323,7 +324,7 @@ include $(TEMPLATE_PATH)/Makefile.common
 
 $(foreach target, $(TARGETS), $(call define_target, $(target)))
 
-.PHONY: flash flash_softdevice erase
+.PHONY: flash flash_softdevice erase jlink debug
 
 # Flash the program
 flash: default
@@ -344,3 +345,9 @@ SDK_CONFIG_FILE := ./config/sdk_config.h
 CMSIS_CONFIG_TOOL := $(SDK_ROOT)/external_tools/cmsisconfig/CMSIS_Configuration_Wizard.jar
 sdk_config:
 	java -jar $(CMSIS_CONFIG_TOOL) $(SDK_CONFIG_FILE)
+
+jlink:
+	JLinkGDBServerCL -device nrf52840_xxaa -if swd -port 2331
+
+debug:
+	$(GNU_INSTALL_ROOT)/arm-none-eabi-gdb _build/nrf52840_xxaa.out -x gdb_cmds.txt
